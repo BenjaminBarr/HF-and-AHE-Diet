@@ -12,7 +12,7 @@ library(emmeans)
 library(lme4)
 
 ## Read in Data
-hf.mice <- read.csv("./Data/hf.mice.csv")
+hf.mice <- read.csv("./hf.mice.csv")
 
 hf.mice$series <- paste(hf.mice$group," ",hf.mice$sex,"", sep = "")
 # Calculate weekly mean
