@@ -39,6 +39,14 @@ library(survival)
 library(knitr)
 library(tibble)
 library(cowplot)
+library(ggtext)
+
+#READ ME#
+## Shorthand for groups in this assessment are as follows:
+  # 3 = HFBN
+  # 4 = HFB
+  # 5 = HFCN
+  # 6 = HFC
 
 #Event data (Censored[0] and Deaths[1])
 getwd()
@@ -46,9 +54,8 @@ hflive <- read.csv("./Data/hf.live.csv")
 
 names(hflive)
 
+# Generate Kaplan-Meier Model
 hf.km.model <- survfit(data = hflive, Surv(week, death) ~ group)
-#kmf <- survfit(data = hflive[which(hflive$sex == "female"),], Surv(week, death) ~ group)
-#kmm <- survfit(data = hflive[which(hflive$sex == "male"),], Surv(week, death) ~ group)
 
 ### ALL ###
 hflive$group <- factor(hflive$group, levels = c("group 6", "group 5", "group 4", "group 3"))
@@ -62,8 +69,11 @@ female.plot <- survfit2(Surv(week, death) ~ group, data = hflive[which(hflive$se
     y = "Overall Survival Probability",
     title = "Females") +
   guides(linetype = "none") +
-  scale_ggsurvfit(y_scales = list(limits = c(.4, 1), breaks = seq(.2, 1, by = .2))) +
-  add_pvalue(location = "annotation", y = .5, x = 20, caption = "Log-rank {p.value}", size = 5)
+  theme_ggsurvfit_KMunicate() +  
+  geom_richtext(fill = NA, label.color = NA, y = .50, x = 20, 
+                label = "Log-rank *p* = 0.5", 
+                size = 5, family = "sans") +
+  scale_ggsurvfit(y_scales = list(limits = c(.4, 1), breaks = seq(.2, 1, by = .2)))
 female.plot
 
 ## Males ##
@@ -76,8 +86,11 @@ male.plot <- survfit2(Surv(week, death) ~ group, data = hflive[which(hflive$sex 
     y = "Overall Survival Probability",
     title = "Males") +
   guides(linetype = "none") +
-  scale_ggsurvfit(y_scales = list(limits = c(.4, 1), breaks = seq(.2, 1, by = .2))) +
-  add_pvalue(location = "annotation", y = .5, x = 20, caption = "Log-rank {p.value}", size = 5)
+  theme_ggsurvfit_KMunicate() +  
+  geom_richtext(fill = NA, label.color = NA, y = .50, x = 20, 
+                                               label = "Log-rank *p* = 0.066", 
+                                               size = 5, family = "sans") +
+  scale_ggsurvfit(y_scales = list(limits = c(.4, 1), breaks = seq(.2, 1, by = .2)))
 
 mfkm <- female.plot + male.plot + 
   patchwork::plot_layout(guides = "collect") &
@@ -94,19 +107,12 @@ title <- ggdraw() +
     # so title is aligned with left edge of first plot
     plot.margin = margin(0, 0, 0, 7)
   )
-
+# Add title to female and male KM
 plot_grid(title, mfkm,
           ncol = 1,
           rel_heights = c(0.1, 1))
 
-
-
-
-survfit(Surv(week, death) ~ group, data = hflive[which(hflive$sex == "male"),]) %>% 
-  tbl_survfit(
-    times = 72,
-    label_header = "**18-Month survival (95% CI)**"
-  )
+# Assess significance using survdiff
 survdiff(formula = Surv(week, death) ~ group, data = hflive[which(hflive$sex == "male"),])
 survdiff(formula = Surv(week, death) ~ group, data = hflive[which(hflive$sex == "female"),])
 

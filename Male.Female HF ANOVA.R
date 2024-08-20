@@ -61,11 +61,20 @@ library(ggpattern)
 source_path <- here("raw-R work", "ggplot_the_model.R")
 source(source_path)
 
+#READ ME#
+## Shorthand for groups in this assessment are as follows:
+  # 3 = HFBN
+  # 4 = HFB
+  # 5 = HFCN
+  # 6 = HFC
+
 ## Data Start ##
 getwd()
 
+# Read in MRI Data from HFandN MRI.csv
 hfdt <- read.csv("./Data/HFandN MRI.csv")
 
+# Generate Monthly averages and SE for each group and sex
 hf.summary <- hfdt %>% group_by(group, sex, m.start,) %>%
   summarise(mean_mass = mean(weight),
             se_mass = sd(weight)/sqrt(length(weight)),
@@ -76,41 +85,52 @@ hf.summary <- hfdt %>% group_by(group, sex, m.start,) %>%
             n = n())
 hf.summary
 
+# Write the summary to .csv (comma separate variables) file for easy access
 write.csv(hf.summary, "./Data/HFSummary.csv")
+
+# Generate linear models (lm) for TOTAL MASS 6, 12, and 18 months based on sex, AHE (pH), and protein (beef/casein)
+## (sex = 1 or 0; 1 = male; 0 = female)
+## (pH = 1 or 0; 1 = treated (AHE); 0 = untreated)
+## (protein = 1 or 0; 1 = beef; 0 = casein)
 
 hf6.lm <- lm(weight ~ sex * ph * protein, data = hfdt[which(hfdt$m.start == 6),])
 hf12.lm <- lm(weight ~ sex * ph * protein, data = hfdt[which(hfdt$m.start == 12),])
 hf18.lm <- lm(weight ~ sex * ph * protein, data = hfdt[which(hfdt$m.start == 18),])
 
+# Perform ANOVA for each lm
 anova(hf6.lm)
 anova(hf12.lm)
 anova(hf18.lm)
 
-anova(hf6.lm)
-
+# Use emmeans to format data for post-hoc analysis. (This is similar to summary but with df and CI)
 hf6.em <- emmeans(hf6.lm, specs = c("sex", "ph", "protein"))
 hf6.em
 
+# Place into data.table
 hf6.em_dt <- data.table(summary(hf6.em))
 hf6.em_dt
 
+# Pairwise comparisons 
 hf6.pairs <- contrast(hf6.em,
-                     method = "revpairwise",
-                     simple = "each",
-                     combine = T,
-                     adjust = "sidak") %>%
+                     method = "revpairwise", #compare groups with HFC as the "control"
+                     simple = "each", #compare all groups to each other
+                     combine = T, #return all comparisons together
+                     adjust = "sidak") %>% #Sidak adjustment is used as sample sizes vary
   summary(infer = T, )
 
+# Display and add significance to graph
 hf6.pairs <- na.omit(hf6.pairs)
 hf6.pairs_dt <- data.table(hf6.pairs)
 
 group1 <- hf6.pairs_dt$contrast
 
+# Provide 1st x-coordinate for significance bars in figure
 group1 <- gsub(" - sex0", "", as.character(group1))
 group1 <- gsub(" - ph0", "", as.character(group1))
 group1 <- gsub(" - protein0", "", as.character(group1))
 group1 <- as.factor(group1)
 
+# Provide 2nd x-coordinate for significance bars in figure
 group2 <- hf6.pairs_dt$contrast
 group2 <- gsub("sex1 - ", "", as.character(group2))
 group2 <- gsub("ph1 - ", "", as.character(group2))
@@ -118,11 +138,12 @@ group2 <- gsub("protein1 - ", "", as.character(group2))
 group2 <- as.factor(group2)
 group2
 
+# Add to dataframe for ggplot
 hf6.pairs_dt$group1 <- group1
 hf6.pairs_dt$group2 <- group2
 hf6.pairs_dt
 
-
+# make displayed p-values pretty
 hf6.pairs_dt[, p_rounded := p_round(p.value,
                                    digits = 2)]
 hf6.pairs_dt[, p_pretty := p_format(p_rounded,
@@ -131,13 +152,11 @@ hf6.pairs_dt[, p_pretty := p_format(p_rounded,
                                    add.p = TRUE)]
 hf6.pairs_dt
 
-levels(hf6.pairs)
-
-nrow(hf6.pairs_dt)
-
+# Add group labels to means table
 hf6.em_dt$group <- c("group 6", "group 6", "group 5", "group 5", 
                       "group 4", "group 4", "group 3", "group 3")
 
+# Rename significance bar coordinates
 hf6.pairs_dt$group1 <- c("group 6", "group 5", "group 4", "group 3",
                           "group 5", "group 5", "group 3", "group 3",
                           "group 4", "group 4", "group 3", "group 3")
@@ -147,7 +166,7 @@ hf6.pairs_dt$group2 <- c("group 6", "group 5", "group 4", "group 3",
                           "group 6", "group 6", "group 4", "group 4",
                           "group 6", "group 6", "group 5", "group 5")
 
-
+# Plot Data
 ggbarplot(data = hf6.em_dt, 
           x = "group", 
           y = "emmean", 
@@ -164,6 +183,8 @@ ggbarplot(data = hf6.em_dt,
                      y.position = c(seq(from = 50, to = 64, by = 2)),
                      tip.length = 0.01) +
   labs(title = "HF Month 6 Mass", y ="Weight")
+
+#### Repeat the above steps for each time point ####
 
 ### HF 12 Mass
 hf12.em <- emmeans(hf12.lm, specs = c("sex", "ph", "protein"))
@@ -320,6 +341,7 @@ ggbarplot(data = hf18.em_dt,
                      tip.length = 0.01) +
   labs(title = "HF Month 18 Mass", y ="Weight")
 
+### Combine all total mass plots ###
 ## ALL MASS ##
 hf.em_dt <- rbind(hf6.em_dt, hf12.em_dt, hf18.em_dt)
 hf.em_dt$age <- rep(c(6, 12, 18), each = 8)
@@ -373,6 +395,7 @@ ggbarplot(data = hf.em_dt,
   labs(title = "Mass Over Time", y ="Total Mass (g)", x = "Collection Timepoint")
 
 
+#### Repeat the above steps for each mass type ####
 ##HF Fat
 
 hf6f.lm <- lm(fat ~ sex * ph * protein, data = hfdt[which(hfdt$m.start == 6),])
@@ -939,13 +962,17 @@ ggbarplot(data = l.em_dt,
   scale_x_discrete(labels = rep(c(6, 12, 18), times = 4)) +
   labs(title = "Lean Mass Over Time", y ="Lean Mass (g)", x = "Collection Timepoint (Months)")
 
+# Plots can be further separated into males and females with all mass types grouped together #
 
-
-#Facet Wrap#
+# First label means of all mass types #
 hf.em_dt$cat <- "Total Mass (g)"
 l.em_dt$cat <- "Lean Mass (g)"
 f.em_dt$cat <- "Fat Mass (g)"
+
+# Combine all means #
 all.em_dt <- rbind(hf.em_dt, l.em_dt, f.em_dt)
+
+# Generate x axis positions for each mass type #
 all.em_dt$xlab <- paste(all.em_dt$group,"",all.em_dt$age,"", sep = "")
 all.em_dt$group <- as.factor(all.em_dt$group)
 
@@ -959,9 +986,11 @@ levels(all.em_dt$xlab)
 
 is.numeric(all.em_dt$emmean)
 
+# Include group names
 glab <- c(`group 3` = "HFBN", `group 4` = "HFB", 
           `group 5` = "HFCN", `group 6` = "HFC")
-#names(glab) <-levels(all.em_dt$group)
+
+
 names(glab) <- as.factor(names(glab))
 
 is.character(names(glab))
@@ -969,9 +998,13 @@ is.factor(all.em_dt$group)
 
 all.em_dt$group <- as.factor(all.em_dt$group)
 
+# Select colors
 gcolor <- c("brown1", "deepskyblue3", "chartreuse4", "purple")
 
 #### Plot Combining ####
+
+
+
 ## Females First ##
 
 levels(all.em_dt$cat)
@@ -983,12 +1016,9 @@ levels(all.em_dt$group)
 females <- all.em_dt[which(all.em_dt$sex == 0)]
 males <- all.em_dt[which(all.em_dt$sex == 1)]
 
+# Label facets
 sex_label <- c("Female", "Male")
 names(sex_label) <- c(0, 1)
-
-group_label <- c("HFC", "HFCN",
-                 "HFB", "HFBN")
-names(group_label) <- c("group 6", "group 5", "group 4", "group 3")
 
 #FEMALES#
 ## Plot Figure ##
@@ -996,7 +1026,6 @@ fplt <- ggplot(data = females, aes(x = factor(xlab, levels = c("6 T", "6 L", "6 
                                                          "12 T", "12 L", "12 F",
                                                          "18 T", "18 L", "18 F")), 
                              y = emmean)) +
-  #facet_wrap(vars(group), labeller = labeller(group = group_label))+
   geom_col_pattern(aes(pattern = cat, pattern_angle = cat),
                    pattern_fill = "white",
                    colour = "black",
@@ -1061,7 +1090,7 @@ types = get_plot_component(last_plot(), "guide-box-top")
 
 plot_grid(fplt, types, nrow = 2, rel_widths = c(.8, .2), rel_heights = c(.8, .1))
 
-#MALES#
+# Repeat the above for MALES#
 ## Plot Figure ##
 mplt <- ggplot(data = males, aes(x = factor(xlab, levels = c("6 T", "6 L", "6 F",
                                                                "12 T", "12 L", "12 F",
@@ -1134,7 +1163,7 @@ plot_grid(mplt, type, nrow = 2, rel_widths = c(.8, .2), rel_heights = c(.8, .1))
 
 #### Edit Tables ####
 
-# Tables #
+# Consolidated spread sheets for each table #
 write.csv(anova(hf6.lm), "./Data/hf.anova.6.csv")
 write.csv(anova(hf12.lm), "./Data/hf.anova.12.csv")
 write.csv(anova(hf18.lm), "./Data/hf.anova.18.csv")
